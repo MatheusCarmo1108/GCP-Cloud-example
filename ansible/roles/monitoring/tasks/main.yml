@@ -1,0 +1,43 @@
+- name: "Install Monitoring charts"
+  block:
+  - name: Change to MAIN CLUSTER 
+    shell: |
+      kubectx development-main 
+      
+  # INSTALL MONITORING
+  - name: Create Monitoring namespace
+    k8s:
+      name: monitoring
+      api_version: v1
+      kind: Namespace
+      state: present
+
+  - name: Add Prometheus Stack Monitoring chart repo
+    kubernetes.core.helm_repository:
+      name: prometheus-community
+      repo_url: https://prometheus-community.github.io/helm-charts
+
+  - name: Install Prometheus Stack Monitoring in main cluster
+    kubernetes.core.helm:
+      state: present
+      name: pmt-server
+      chart_ref: prometheus-community/kube-prometheus-stack
+      release_namespace: monitoring
+      create_namespace: True
+      wait: true
+      timeout: 10m
+      values:
+        replicaCount: 1
+
+  - name: Install Prometheus Adapter in main cluster
+    kubernetes.core.helm:
+      state: present
+      name: prometheus-adapter
+      chart_ref: prometheus-community/prometheus-adapter
+      release_namespace: monitoring
+      create_namespace: True
+      wait: true
+      timeout: 10m
+      values_files: "{{ temp_feature_dir.path }}/features/api/features/4-monitoring/staging/pmt-adapter/helm-api.yaml"
+      values:
+        replicaCount: 1

@@ -1,0 +1,10 @@
+bastion: 
+  hosts:
+    bastion:
+  vars: 
+    development_ssh_user: "{{ user }}"
+timescaledb:
+  hosts:
+    timescale:
+  vars: 
+    development_ssh_user: "{{ user }}"

@@ -1,0 +1,125 @@
+- name: Create new user for bastion
+  become: true
+  user:
+    name: "{{ user }}"
+    state: present
+
+- name: Add an apt signing key for Kubernetes
+  become: true
+  apt_key:
+    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    state: present
+
+- name: Install Kubernetes binaries
+  become: true
+  apt:
+    name: 
+    - kubectl
+    - zsh
+    - git
+    - wget
+    - python3-pip
+    - google-cloud-sdk-gke-gcloud-auth-plugin
+    state: present
+
+- name: Installing Zsh, git and other dependencies
+  become: true
+  apt:
+    name:
+    - zsh
+    - git
+    - wget
+    - python3-pip
+    - google-cloud-sdk-gke-gcloud-auth-plugin
+    # state: latest
+  # register: installation
+
+- name: Installing PyYAML and Kubernetes for pip3
+  shell: pip3 install PyYAML kubernetes
+  register: pip3_installed
+  when: pip3_installed is not defined
+
+- name: Install Helm
+  shell: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  register: helm_installed
+  when: helm_installed is not defined
+
+# If this plugin isn't found, ansible will log errors as warning thus breaking the process
+- name: Install Helm diff plugin
+  kubernetes.core.helm_plugin:
+    plugin_path: https://github.com/databus23/helm-diff
+    state: present
+  register: helm_diff_installed
+  when: helm_diff_installed is not defined
+
+- name: Installing K9S
+  become: true
+  shell: |
+    wget https://github.com/derailed/k9s/releases/download/v0.25.18/k9s_Linux_x86_64.tar.gz
+    tar xvzf k9s_Linux_x86_64.tar.gz
+    chmod +x k9s
+    sudo mv ./k9s /usr/local/bin/k9s
+
+- name: Installing Kubectx 
+  shell: |
+    wget https://github.com/ahmetb/kubectx/releases/download/v0.9.4/kubectx_v0.9.4_linux_x86_64.tar.gz
+    tar xvzf kubectx_v0.9.4_linux_x86_64.tar.gz
+    chmod +x kubectx
+    sudo mv ./kubectx /usr/local/bin/kubectx
+
+- name: Installing Kubens
+  shell: |
+    wget https://github.com/ahmetb/kubectx/releases/download/v0.9.4/kubens_v0.9.4_linux_x86_64.tar.gz
+    tar xvzf kubens_v0.9.4_linux_x86_64.tar.gz
+    chmod +x kubens
+    sudo mv ./kubens /usr/local/bin/kubens
+
+- name: Check if .zshrc exists
+  stat:
+    path: ~/.zshrc
+  register: stat_rc_result
+
+- name: Check if .oh-my-zsh exists
+  stat:
+    path: ~/.oh-my-zsh
+  register: stat_oh_my_zsh_result
+
+- name: Cloning oh-my-zsh
+  git:
+    repo: https://github.com/robbyrussell/oh-my-zsh
+    dest: ~/.oh-my-zsh
+  when: not stat_oh_my_zsh_result.stat.exists
+
+- name: Creating new ~/.zshrc
+  copy:
+    src: ~/.oh-my-zsh/templates/zshrc.zsh-template
+    dest: ~/.zshrc
+  when: not stat_rc_result.stat.exists
+
+- name: Changing default Oh My ZSH shell
+  lineinfile:
+    path: ~/.zshrc
+    regexp: ZSH_THEME="robbyrussell"
+    line: ZSH_THEME="ys"
+
+- name: Changing dafault shell for "{{ user }}" user
+  become: true
+  user:
+    name: "{{ user }}"
+    shell: /bin/zsh
+
+- name: Add new bastion entry to local ~/.ssh/config
+  delegate_to: 127.0.0.1
+  blockinfile:
+    path: ~/.ssh/config
+    insertafter: EOF
+    block: |
+      # APAGAR
+      Host apagar
+        User {{ user }}
+        IdentityFile {{ private_key }}
+        # VM IP
+        Hostname {{ bastion_ip }}
+        TCPKeepAlive yes
+        ServerAliveInterval 60
+        ServerAliveCountMax 10

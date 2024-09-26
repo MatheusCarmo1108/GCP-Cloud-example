@@ -1,0 +1,46 @@
+- name: "Circumvent"
+  block:
+  - name: "Create temporary file for gcloud key"
+    tempfile: ~
+    register: gcloud_key_tempfile
+
+  - name: "Write gcloud key to temporary file"
+    copy: content="{{ service_account_contents }}" dest={{ gcloud_key_tempfile.path }}
+
+  - name: "Set GCloud Default Project"
+    shell: gcloud config set project {{ project_id }}
+
+  - name: "Login in gcloud"
+    shell: gcloud auth activate-service-account --key-file {{ gcloud_key_tempfile.path }}
+
+  # check if context already exists and is equal renamed one
+  - name: Check current kubernetes cluster
+    command: kubectl config current-context
+    changed_when: false
+    register: kubectl_current_context
+    check_mode: no
+    tags: always
+    failed_when: no
+
+  - name: "Get Cluster development main context"
+    shell: |
+      gcloud container clusters get-credentials {{ cluster_name }} \
+        --project {{ project_id }} --zone {{ cluster_location }}
+    when: kubectl_current_context.stdout != 'development-main'
+
+  - name: "Rename Cluster development main context"
+    shell: |
+      kubectx development-main=$(kubectl config current-context)
+    when: kubectl_current_context.stdout != 'development-main'
+
+  - name: "Get Cluster development iad context"
+    shell: |
+      gcloud container clusters get-credentials {{ cluster_iad_name }} \
+        --project {{ project_id }} --zone {{ cluster_location }}
+    when: kubectl_current_context.stdout != 'development-iad' 
+
+  - name: "Rename Cluster development iad context"
+    shell: |
+      kubectx development-iad=$(kubectl config current-context) \
+        
+    when: kubectl_current_context.stdout != 'development-iad' 

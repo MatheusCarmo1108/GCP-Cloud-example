@@ -1,0 +1,9 @@
+- hosts: timescaledb
+  roles:
+    - timescale_db
+- hosts: bastion
+  vars_files:
+    - ../tf_ansible_vars_file.yml
+  roles:
+    - bastion
+    - gke_cluster

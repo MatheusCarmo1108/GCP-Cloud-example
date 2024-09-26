@@ -1,0 +1,75 @@
+- name: "Configure self-hosted TimescaleDB on Cloud"
+  block: 
+  - name: Add necessary tools
+    become: true
+    apt: 
+      name: "{{ packages }}"
+      state: present 
+      update_cache: yes
+    vars:
+      packages:
+        - lsb-release 
+        - wget
+        - gnupg
+        - postgresql-common
+        - apt-transport-https 
+        # - python3-pip
+    register: apt_action
+    retries: 100
+    until: apt_action is success or ('Failed to lock apt for exclusive operation' not in apt_action.msg and '/var/lib/dpkg/lock' not in apt_action.msg)
+    delay: 6
+
+  # - name: install pexpect via pip
+  #   pip:
+  #     name: pexpect
+  # - name: Enable PostgreSQL repository
+  #   become: true
+  #   expect:
+  #     command: /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+  #     responses: 
+  #       'Press Enter to continue, or Ctrl-C to abort.': ''
+
+  - name: Configure key
+    become: true
+    shell: | 
+      sudo sh -c 'echo "deb https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -c -s) main" > /etc/apt/sources.list.d/timescaledb.list'
+      sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+
+  - name: Import the repository signing key
+    shell: |
+      wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | sudo apt-key add -
+      wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+
+  - name: Update the package lists
+    become: true
+    apt: 
+      name: timescaledb-2-postgresql-14
+      state: present 
+      update_cache: yes
+    register: apt_action
+  
+  - name: Config TimescaleDB 
+    become: true
+    shell: |
+      sudo timescaledb-tune --quiet --yes
+  
+  - name: Restart Service Configuration 
+    become: true
+    shell: | 
+      sudo systemctl restart postgresql
+  
+  - name: Add config in pg_hba.conf
+    become: true
+    blockinfile:
+      path: /etc/postgresql/14/main/pg_hba.conf 
+      insertafter: EOF 
+      block: |
+        host    all             all         0.0.0.0/0               scram-sha-256
+
+  - name: Add config in postgresql.conf 
+    become: true
+    lineinfile:
+      path: /etc/postgresql/14/main/postgresql.conf
+      regexp: listen_addresses = 'localhost' 
+      line: listen_addresses = '0.0.0.0' 
+    
